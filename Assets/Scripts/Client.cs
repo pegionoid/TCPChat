@@ -13,8 +13,23 @@ public class Client : MonoBehaviour
     [SerializeField] public string _serveripaddress;
     [SerializeField] public int _serverport;
 
-    private TcpClient tcpClient;
-    
+    private Socket server;
+
+    //非同期データ受信のための状態オブジェクト
+    private class AsyncStateObject
+    {
+        public Socket Socket;
+        public byte[] ReceiveBuffer;
+        public MemoryStream ReceivedData;
+
+        public AsyncStateObject(System.Net.Sockets.Socket soc, int buffersize)
+        {
+            this.Socket = soc;
+            this.ReceiveBuffer = new byte[buffersize];
+            this.ReceivedData = new System.IO.MemoryStream();
+        }
+    }
+
     // Start is called before the first frame update
     void Start()
     {
@@ -24,74 +39,128 @@ public class Client : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        Send(Time.frameCount.ToString(),tcpClient);
+        //Send(Time.frameCount.ToString(), server);
+    }
+
+    private void OnDestroy()
+    {
+        server?.Dispose();
     }
 
     public void StartConnection(string host, int port)
     {
         IPAddress ip;
 
-        Debug.Log("ipaddress:" + host + " port:" + port);
         // ホストがIPアドレス形式じゃなかったら終了
         if (!IPAddress.TryParse(host, out ip))
         {
-            Debug.Log("server address is invalid.");
+            Debug.Log($"[{transform.name}]server address is invalid.");
             return;
         }
 
-        tcpClient = new TcpClient(AddressFamily.InterNetwork);
+        Debug.Log($"[{transform.name}]ipaddress:" + host + " port:" + port);
 
-        tcpClient.BeginConnect(ip, port, DoConnectTcpClientCallBack, tcpClient);
+        Socket s = new Socket(ip.AddressFamily,
+                              SocketType.Stream,
+                              ProtocolType.Tcp);
+
+        s.BeginConnect(ip, port, DoConnectTcpClientCallBack, s);
     }
 
     // サーバへの接続処理
     private void DoConnectTcpClientCallBack(IAsyncResult ar)
     {
-        tcpClient = (TcpClient)ar.AsyncState;
-
-        var stream = tcpClient.GetStream();
-        var reader = new StreamReader(stream, Encoding.UTF8);
-
-        // 接続が切れるまで送受信を繰り返す
-        while (tcpClient.Connected)
+        try
         {
-            while (!reader.EndOfStream)
-            {
-                // 一行分の文字列を受け取る
-                var str = reader.ReadLine();
-                Byte[] vs = Encoding.UTF8.GetBytes(str);
-                Debug.Log("Received[" + tcpClient.Client.RemoteEndPoint + "] : " + str);
-                
-            }
+            server = (Socket)ar.AsyncState;
 
-            //// 1000μs待って、接続状態が保留中、読取可、切断の場合
-            //if (server.Client.Poll(1000, SelectMode.SelectRead))
-            //{
-            //    // かつ、クライアントからの読取可能データ量がZEROの場合
-            //    if (server.Client.Available == 0)
-            //    {
-                    
-            //    }
-            //}
+            server.EndConnect(ar);
+
+            Debug.Log($"[{transform.name}]Connect: " + server.RemoteEndPoint);
+            Debug.Log($"[{transform.name}]ReceiveBufferSize: " + server.ReceiveBufferSize);
+            Debug.Log($"[{transform.name}]SendBufferSize: " + server.SendBufferSize);
+            
+            // サーバからの受信を待つ
+            AsyncStateObject so = new AsyncStateObject(server, server.ReceiveBufferSize);
+            server.BeginReceive(so.ReceiveBuffer,
+                                0,
+                                so.ReceiveBuffer.Length,
+                                SocketFlags.None,
+                                DoReceiveMessageCallback,
+                                so);
+        } catch (Exception e) {
+            Debug.Log($"[{transform.name}]{e.ToString()}");
         }
-        // クライアントが終了状態と判断し、切断
-        Debug.Log("Disconnect: " + tcpClient.Client.RemoteEndPoint);
+        
     }
 
-    private void Send(String massage, TcpClient server)
+    // サーバからのメッセージ受信処理
+    private void DoReceiveMessageCallback(IAsyncResult ar)
     {
-        if (!server.Connected)
+        AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
+
+        int len = 0;
+        try
         {
-            //Debug.Log("server Disconnected");
+            len = so.Socket.EndReceive(ar);
+        }
+        catch (System.ObjectDisposedException)
+        {
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + so.Socket.RemoteEndPoint);
             return;
         }
 
-        using (var stream = server.GetStream())
+        // クライアントからの読取可能データ量がZEROの場合
+        if (len <= 0)
         {
-            using (var writer = new StreamWriter(stream, Encoding.UTF8))
-            {
-                writer.WriteLine(massage);
-            }
+            // クライアントが終了状態と判断し、切断
+            Debug.Log($"[{transform.name}]Disconnected: " + so.Socket.RemoteEndPoint);
+            return;
         }
+
+        // サーバとのネットワークストリームを取得
+        so.ReceivedData.Write(so.ReceiveBuffer, 0, len);
+        if (so.Socket.Available == 0)
+        {
+            // 最後まで受信した時
+            // 受信したデータを文字列に変換
+            string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+            Debug.Log($"[{transform.name}]Receive : {str}");
+            so.ReceivedData.Close();
+            so.ReceivedData = new MemoryStream();
+        }
+
+        // 再び受信待ち
+        so.Socket.BeginReceive(so.ReceiveBuffer,
+                               0,
+                               so.ReceiveBuffer.Length,
+                               SocketFlags.None,
+                               DoReceiveMessageCallback,
+                               so);
+    }
+
+    private void Send(String message, Socket server)
+    {
+        if (!server.Connected)
+        {
+            Debug.Log($"[{transform.name}]server Disconnected");
+            return;
+        }
+        
+        byte[] messagebyte = Encoding.UTF8.GetBytes($"({transform.name}){message}");
+        server.BeginSend(messagebyte,
+                         0,
+                         messagebyte.Length,
+                         SocketFlags.None,
+                         DoSendMessageCallBack,
+                         server);
+    }
+
+    private void DoSendMessageCallBack(IAsyncResult ar)
+    {
+        Socket server = (Socket)ar.AsyncState;
+
+        server.EndSend(ar);
     }
 }

@@ -10,14 +10,27 @@ public class Server : MonoBehaviour
 {
     [SerializeField] public string _ipaddress;
     [SerializeField] public int _port;
-    private List<TcpClient> listClient;
+    private List<Socket> listClient;
+    
+    //非同期データ受信のための状態オブジェクト
+    private class AsyncStateObject
+    {
+        public Socket Socket;
+        public byte[] ReceiveBuffer;
+        public MemoryStream ReceivedData;
 
-    private TcpListener tcpListener;
+        public AsyncStateObject(System.Net.Sockets.Socket soc)
+        {
+            this.Socket = soc;
+            this.ReceiveBuffer = new byte[1024];
+            this.ReceivedData = new System.IO.MemoryStream();
+        }
+    }
 
     // Start is called before the first frame update
     void Start()
     {
-        listClient = new List<TcpClient>();
+        listClient = new List<Socket>();
         // 指定したポートを開く
         Listen(_ipaddress, _port);
     }
@@ -25,7 +38,7 @@ public class Server : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        
+        SendAll(Time.frameCount.ToString());
     }
 
     // ソケット接続準備、待機
@@ -41,77 +54,137 @@ public class Server : MonoBehaviour
             return;
         }
 
-        // IPアドレスとポート番号でTCP通信の受け口（TCPListener）を初期化
-        tcpListener = new TcpListener(ip, port);
+        IPEndPoint serverEndPoint = new IPEndPoint(ip, port);
 
-        // TCP通信の受信待ちを開始
-        tcpListener.Start();
+        // Listen用のSocketのモードを指定して初期化
+        Socket listener = new Socket(ip.AddressFamily,
+                              SocketType.Stream,
+                              ProtocolType.Tcp);
 
-        // TCP通信を受信したときのコールバック関数を設定
-        tcpListener.BeginAcceptSocket(DoAcceptTcpClientCallback, tcpListener);
+        // 初期化したSocketをIPアドレスとポートに紐づけ
+        listener.Bind(serverEndPoint);
+
+        // 受信待ちを開始
+        listener.Listen(100);
+
+        // 接続要求が来た時のコールバック関数を設定
+        listener.BeginAccept(DoAcceptTcpClientCallback, listener);
     }
 
     // クライアントからの接続処理
     private void DoAcceptTcpClientCallback(IAsyncResult ar)
     {
-        var listener = (TcpListener)ar.AsyncState;
-        var client = listener.EndAcceptTcpClient(ar);
-        lock(listClient)
+        Socket listener = (Socket)ar.AsyncState;
+        Socket client = null;
+        try
+        {
+            client = listener.EndAccept(ar);
+        }
+        catch (System.ObjectDisposedException)
+        {
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + listener.RemoteEndPoint);
+            return;
+        }
+
+        lock (listClient)
         {
             listClient.Add(client);
         }
-        Debug.Log("Connect: " + client.Client.RemoteEndPoint);
-        Debug.Log("ReceiveBufferSize: " + client.Client.ReceiveBufferSize);
-        Debug.Log("SendBufferSize: " + client.Client.SendBufferSize);
+        Debug.Log("Connect: " + client.RemoteEndPoint);
+        Debug.Log("ReceiveBufferSize: " + client.ReceiveBufferSize);
+        Debug.Log("SendBufferSize: " + client.SendBufferSize);
+        
+        // 今接続した人からの受信を待つ
+        AsyncStateObject so = new AsyncStateObject(client);
+        client.BeginReceive(so.ReceiveBuffer,
+                            0,
+                            so.ReceiveBuffer.Length,
+                            SocketFlags.None,
+                            DoReceiveMessageCallback,
+                            so);
 
         // 接続が確立したら次の人を受け付ける
-        listener.BeginAcceptSocket(DoAcceptTcpClientCallback, listener);
+        listener.BeginAccept(DoAcceptTcpClientCallback, listener);
+    }
+
+    // クライアントからのメッセージ受信処理
+    private void DoReceiveMessageCallback(IAsyncResult ar)
+    {
+        AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
+
+        int len = 0;
+        try
+        {
+            len = so.Socket.EndReceive(ar);
+        }
+        catch
+        {
+            // 閉じた時
+            Debug.Log("Closed: " + so.Socket.RemoteEndPoint);
+            lock (listClient)
+            {
+                listClient.Remove(so.Socket);
+            }
+            return;
+        }
 
         // 今接続した人とのネットワークストリームを取得
-        using (var stream = client.GetStream())
+        so.ReceivedData.Write(so.ReceiveBuffer, 0, len);
+        if(so.Socket.Available == 0)
         {
-            using (var reader = new StreamReader(stream, Encoding.UTF8))
-            {
-                // 接続が切れるまで送受信を繰り返す
-                while (client.Connected)
-                {
-                    while (!reader.EndOfStream)
-                    {
-                        // 一行分の文字列を受け取る
-                        var str = reader.ReadLine();
-                        Debug.Log("Received[" + client.Client.RemoteEndPoint + "] : " + str);
-                        foreach (var c in listClient)
-                        {
-                            if (c == client) continue;
-                            using (var clientstream = c.GetStream())
-                            {
-                                using (var writer = new StreamWriter(clientstream, Encoding.UTF8))
-                                {
-                                    writer.Write(str);
-                                }
-                            }
-                        }
-                    }
+            // 最後まで受信した時
+            // 受信したデータを文字列に変換
+            string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+            Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
+            //lock(listClient)
+            //{
+            //    SendAll(str, listClient);
+            //}
+            
+            so.ReceivedData.Close();
+            so.ReceivedData = new MemoryStream();
+        }
 
-                    // 1000μs待って、接続状態が保留中、読取可、切断の場合
-                    //if (client.Client.Poll(1000, SelectMode.SelectRead))
-                    //{
-                    //    // かつ、クライアントからの読取可能データ量がZEROの場合
-                    //    if (client.Client.Available == 0)
-                    //    {
-                            
-                    //        break;
-                    //    }
-                    //}
-                }
-                // クライアントが終了状態と判断し、切断
-                Debug.Log("Disconnect: " + client.Client.RemoteEndPoint);
+        // 再び受信待ち
+        so.Socket.BeginReceive(so.ReceiveBuffer,
+                               0,
+                               so.ReceiveBuffer.Length,
+                               SocketFlags.None,
+                               DoReceiveMessageCallback,
+                               so);
+    }
+
+    private void SendAll(string message)
+    {
+        //Debug.Log($"[{transform.name}]SendAll : {message}");
+        byte[] messagebyte = Encoding.UTF8.GetBytes(message);
+        
+        foreach (var client in listClient)
+        {
+            if (!client.Connected)
+            {
+                Debug.Log($"[{transform.name}]Disconnected : {client.RemoteEndPoint}");
                 lock (listClient)
                 {
                     listClient.Remove(client);
                 }
                 client.Close();
+                continue;
             }
+            client.BeginSend(messagebyte,
+                         0,
+                         messagebyte.Length,
+                         SocketFlags.None,
+                         DoSendMessageCallBack,
+                         client);
         }
+    }
+
+    private void DoSendMessageCallBack(IAsyncResult ar)
+    {
+        Socket client = (Socket)ar.AsyncState;
+
+        client.EndSend(ar);
     }
 }

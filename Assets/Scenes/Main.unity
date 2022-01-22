@@ -271,7 +271,7 @@ GameObject:
   - component: {fileID: 854990944}
   - component: {fileID: 854990943}
   m_Layer: 0
-  m_Name: TCPClient
+  m_Name: TCPClient1
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -316,7 +316,7 @@ GameObject:
   - component: {fileID: 919649664}
   - component: {fileID: 919649663}
   m_Layer: 0
-  m_Name: TCPClient (1)
+  m_Name: TCPClient2
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
