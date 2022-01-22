@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using UnityEngine;
 
-public class TcpServer : MonoBehaviour
+public class Server : MonoBehaviour
 {
     [SerializeField] public string _ipaddress;
     [SerializeField] public int _port;
@@ -68,40 +68,49 @@ public class TcpServer : MonoBehaviour
         listener.BeginAcceptSocket(DoAcceptTcpClientCallback, listener);
 
         // 今接続した人とのネットワークストリームを取得
-        var stream = client.GetStream();
-        var reader = new StreamReader(stream, Encoding.UTF8);
-
-        // 接続が切れるまで送受信を繰り返す
-        while (client.Connected)
+        using (var stream = client.GetStream())
         {
-            while (!reader.EndOfStream)
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
             {
-                // 一行分の文字列を受け取る
-                var str = reader.ReadLine();
-                Byte[] vs = Encoding.UTF8.GetBytes(str);
-                Debug.Log("Received[" + client.Client.RemoteEndPoint + "] : " + str);
-                foreach(var c in listClient)
+                // 接続が切れるまで送受信を繰り返す
+                while (client.Connected)
                 {
-                    if (c == client) continue;
-                    c.GetStream().Write(vs, 0, vs.Length);
-                }
-            }
-
-            // 1000μs待って、接続状態が保留中、読取可、切断の場合
-            if (client.Client.Poll(1000, SelectMode.SelectRead))
-            {
-                // かつ、クライアントからの読取可能データ量がZEROの場合
-                if (client.Client.Available == 0)
-                {
-                    // クライアントが終了状態と判断し、切断
-                    Debug.Log("Disconnect: " + client.Client.RemoteEndPoint);
-                    lock(listClient)
+                    while (!reader.EndOfStream)
                     {
-                        listClient.Remove(client);
+                        // 一行分の文字列を受け取る
+                        var str = reader.ReadLine();
+                        Debug.Log("Received[" + client.Client.RemoteEndPoint + "] : " + str);
+                        foreach (var c in listClient)
+                        {
+                            if (c == client) continue;
+                            using (var clientstream = c.GetStream())
+                            {
+                                using (var writer = new StreamWriter(clientstream, Encoding.UTF8))
+                                {
+                                    writer.Write(str);
+                                }
+                            }
+                        }
                     }
-                    client.Close();
-                    break;
+
+                    // 1000μs待って、接続状態が保留中、読取可、切断の場合
+                    //if (client.Client.Poll(1000, SelectMode.SelectRead))
+                    //{
+                    //    // かつ、クライアントからの読取可能データ量がZEROの場合
+                    //    if (client.Client.Available == 0)
+                    //    {
+                            
+                    //        break;
+                    //    }
+                    //}
                 }
+                // クライアントが終了状態と判断し、切断
+                Debug.Log("Disconnect: " + client.Client.RemoteEndPoint);
+                lock (listClient)
+                {
+                    listClient.Remove(client);
+                }
+                client.Close();
             }
         }
     }
