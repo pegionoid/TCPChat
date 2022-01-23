@@ -39,7 +39,8 @@ public class Client : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        //Send(Time.frameCount.ToString(), server);
+
+        Send(Time.frameCount.ToString(), server);
     }
 
     private void OnDestroy()
@@ -72,14 +73,15 @@ public class Client : MonoBehaviour
     {
         try
         {
-            server = (Socket)ar.AsyncState;
+            Socket s = (Socket)ar.AsyncState;
+            s.EndConnect(ar);
 
-            server.EndConnect(ar);
+            server = s;
 
             Debug.Log($"[{transform.name}]Connect: " + server.RemoteEndPoint);
             Debug.Log($"[{transform.name}]ReceiveBufferSize: " + server.ReceiveBufferSize);
             Debug.Log($"[{transform.name}]SendBufferSize: " + server.SendBufferSize);
-            
+
             // サーバからの受信を待つ
             AsyncStateObject so = new AsyncStateObject(server, server.ReceiveBufferSize);
             server.BeginReceive(so.ReceiveBuffer,
@@ -142,6 +144,7 @@ public class Client : MonoBehaviour
 
     private void Send(String message, Socket server)
     {
+        if (server is null) return;
         if (!server.Connected)
         {
             Debug.Log($"[{transform.name}]server Disconnected");
@@ -159,8 +162,8 @@ public class Client : MonoBehaviour
 
     private void DoSendMessageCallBack(IAsyncResult ar)
     {
-        Socket server = (Socket)ar.AsyncState;
+        Socket s = (Socket)ar.AsyncState;
 
-        server.EndSend(ar);
+        s.EndSend(ar);
     }
 }
