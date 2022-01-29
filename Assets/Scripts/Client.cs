@@ -77,7 +77,7 @@ public class Client : MonoBehaviour
             s.EndConnect(ar);
 
             server = s;
-
+            
             Debug.Log($"[{transform.name}]Connect: " + server.RemoteEndPoint);
             Debug.Log($"[{transform.name}]ReceiveBufferSize: " + server.ReceiveBufferSize);
             Debug.Log($"[{transform.name}]SendBufferSize: " + server.SendBufferSize);

@@ -4,13 +4,19 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class Server : MonoBehaviour
 {
-    [SerializeField] public string _ipaddress;
-    [SerializeField] public int _port;
+    [SerializeField] public InputField _ipaddress;
+    [SerializeField] public InputField _port;
+    [SerializeField] public Button _listenButton;
+    //public string _ipaddress;
+    //public int _port;
     private List<Socket> listClient;
+    private List<Text> texts;
     
     //非同期データ受信のための状態オブジェクト
     private class AsyncStateObject
@@ -27,18 +33,22 @@ public class Server : MonoBehaviour
         }
     }
 
-    // Start is called before the first frame update
-    void Start()
+    void Awake()
     {
         listClient = new List<Socket>();
-        // 指定したポートを開く
-        Listen(_ipaddress, _port);
+        
     }
 
     // Update is called once per frame
     void Update()
     {
         SendAll(Time.frameCount.ToString());
+    }
+
+    void OnListenButtonClicked()
+    {
+        // 指定したポートを開く
+        Listen(_ipaddress.text, int.Parse(_port.text));
     }
 
     // ソケット接続準備、待機
