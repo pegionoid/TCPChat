@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
@@ -13,10 +14,12 @@ public class Server : MonoBehaviour
     [SerializeField] public InputField _ipaddress;
     [SerializeField] public InputField _port;
     [SerializeField] public Button _listenButton;
+    [SerializeField] public GameObject ChatLogSpace;
+    [SerializeField] public GameObject chatprefab;
     //public string _ipaddress;
     //public int _port;
     private List<Socket> listClient;
-    private List<Text> texts;
+    private List<String> texts;
     
     //非同期データ受信のための状態オブジェクト
     private class AsyncStateObject
@@ -36,13 +39,24 @@ public class Server : MonoBehaviour
     void Awake()
     {
         listClient = new List<Socket>();
-        
+        foreach( Transform n in ChatLogSpace.transform)
+        {
+            GameObject.Destroy(n.gameObject);
+        }
     }
 
     // Update is called once per frame
     void Update()
     {
-        SendAll(Time.frameCount.ToString());
+        //SendAll(Time.frameCount.ToString());
+    }
+
+    private void OnGUI()
+    {
+        //texts.Where(() => { ChatLogSpace.GetComponentInChildren<Text>});
+        GameObject chat = Instantiate(chatprefab);
+        chat.GetComponent<Text>().text = "test";
+        chat.transform.SetParent(ChatLogSpace.transform);
     }
 
     void OnListenButtonClicked()
@@ -147,6 +161,7 @@ public class Server : MonoBehaviour
             // 受信したデータを文字列に変換
             string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
             Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
+            
             //lock(listClient)
             //{
             //    SendAll(str, listClient);
