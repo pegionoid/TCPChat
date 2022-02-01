@@ -39,6 +39,7 @@ public class Server : MonoBehaviour
     void Awake()
     {
         listClient = new List<Socket>();
+        texts = new List<String>();
         foreach( Transform n in ChatLogSpace.transform)
         {
             GameObject.Destroy(n.gameObject);
@@ -53,13 +54,20 @@ public class Server : MonoBehaviour
 
     private void OnGUI()
     {
-        //texts.Where(() => { ChatLogSpace.GetComponentInChildren<Text>});
-        GameObject chat = Instantiate(chatprefab);
-        chat.GetComponent<Text>().text = "test";
-        chat.transform.SetParent(ChatLogSpace.transform);
+        IEnumerable<String> chats = ChatLogSpace.GetComponentsInChildren(typeof(Text))
+                                     .Select((Component c) => { return c.GetComponent<Text>().text; });
+        texts.ForEach(t => {
+            if (!chats.Contains(t))
+            {
+                GameObject chat = Instantiate(chatprefab);
+                chat.GetComponent<Text>().text = t;
+                chat.transform.SetParent(ChatLogSpace.transform);
+            }
+        });
+        
     }
 
-    void OnListenButtonClicked()
+    public void OnListenButtonClicked()
     {
         // 指定したポートを開く
         Listen(_ipaddress.text, int.Parse(_port.text));
@@ -161,7 +169,7 @@ public class Server : MonoBehaviour
             // 受信したデータを文字列に変換
             string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
             Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
-            
+            texts.Add(str);
             //lock(listClient)
             //{
             //    SendAll(str, listClient);
