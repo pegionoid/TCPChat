@@ -19,7 +19,8 @@ public class Server : MonoBehaviour
     //public string _ipaddress;
     //public int _port;
     private List<Socket> listClient;
-    private List<String> texts;
+    private List<ChatData> displayedChats;
+    private List<ChatData> receivedChats;
     
     //非同期データ受信のための状態オブジェクト
     private class AsyncStateObject
@@ -39,8 +40,9 @@ public class Server : MonoBehaviour
     void Awake()
     {
         listClient = new List<Socket>();
-        texts = new List<String>();
-        foreach( Transform n in ChatLogSpace.transform)
+        displayedChats = new List<ChatData>();
+        receivedChats = new List<ChatData>();
+        foreach (Transform n in ChatLogSpace.transform)
         {
             GameObject.Destroy(n.gameObject);
         }
@@ -54,17 +56,13 @@ public class Server : MonoBehaviour
 
     private void OnGUI()
     {
-        IEnumerable<String> chats = ChatLogSpace.GetComponentsInChildren(typeof(Text))
-                                     .Select((Component c) => { return c.GetComponent<Text>().text; });
-        texts.ForEach(t => {
-            if (!chats.Contains(t))
-            {
-                GameObject chat = Instantiate(chatprefab);
-                chat.GetComponent<Text>().text = t;
-                chat.transform.SetParent(ChatLogSpace.transform);
-            }
-        });
-        
+        foreach( ChatData c in receivedChats)
+        {
+            GameObject chat = Instantiate(chatprefab);
+            chat.transform.GetComponent<Chat>().SetData(c);
+            displayedChats.Add(c);
+            receivedChats.Remove(c);
+        }
     }
 
     public void OnListenButtonClicked()
@@ -168,8 +166,9 @@ public class Server : MonoBehaviour
             // 最後まで受信した時
             // 受信したデータを文字列に変換
             string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+            ChatData c = JsonUtility.FromJson<ChatData>(str);
             Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
-            texts.Add(str);
+            receivedChats.Add(c);
             //lock(listClient)
             //{
             //    SendAll(str, listClient);
