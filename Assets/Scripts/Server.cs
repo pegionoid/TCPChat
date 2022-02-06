@@ -56,13 +56,17 @@ public class Server : MonoBehaviour
 
     private void OnGUI()
     {
-        foreach( ChatData c in receivedChats)
+        lock (receivedChats)
         {
-            GameObject chat = Instantiate(chatprefab);
-            chat.transform.GetComponent<Chat>().SetData(c);
-            displayedChats.Add(c);
-            receivedChats.Remove(c);
-        }
+            foreach (ChatData c in receivedChats)
+            {
+                receivedChats.Remove(c);
+                GameObject chat = Instantiate(chatprefab);
+                chat.transform.SetParent(ChatLogSpace.transform);
+                chat.transform.GetComponent<Chat>().SetData(c);
+                displayedChats.Add(c);
+            }
+        }    
     }
 
     public void OnListenButtonClicked()
@@ -160,31 +164,39 @@ public class Server : MonoBehaviour
         }
 
         // 今接続した人とのネットワークストリームを取得
-        so.ReceivedData.Write(so.ReceiveBuffer, 0, len);
-        if(so.Socket.Available == 0)
+        if(len > 0)
         {
-            // 最後まで受信した時
-            // 受信したデータを文字列に変換
-            string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
-            ChatData c = JsonUtility.FromJson<ChatData>(str);
-            Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
-            receivedChats.Add(c);
-            //lock(listClient)
-            //{
-            //    SendAll(str, listClient);
-            //}
-            
-            so.ReceivedData.Close();
-            so.ReceivedData = new MemoryStream();
+            so.ReceivedData.Write(so.ReceiveBuffer, 0, len);
+            if (so.Socket.Available == 0)
+            {
+                // 最後まで受信した時
+                // 受信したデータを文字列に変換
+                string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+                ChatData c = JsonUtility.FromJson<ChatData>(str);
+                c.ClientEndPoint = (IPEndPoint)so.Socket.RemoteEndPoint;
+                Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
+                lock (receivedChats)
+                {
+                    receivedChats.Add(c);
+                }
+                //lock(listClient)
+                //{
+                //    SendAll(str, listClient);
+                //}
+
+                so.ReceivedData.Close();
+                so.ReceivedData = new MemoryStream();
+            }
+            // 再び受信待ち
+            so.Socket.BeginReceive(so.ReceiveBuffer,
+                                   0,
+                                   so.ReceiveBuffer.Length,
+                                   SocketFlags.None,
+                                   DoReceiveMessageCallback,
+                                   so);
         }
 
-        // 再び受信待ち
-        so.Socket.BeginReceive(so.ReceiveBuffer,
-                               0,
-                               so.ReceiveBuffer.Length,
-                               SocketFlags.None,
-                               DoReceiveMessageCallback,
-                               so);
+        
     }
 
     private void SendAll(string message)

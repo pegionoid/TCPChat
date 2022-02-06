@@ -19,7 +19,7 @@ public class Chat : MonoBehaviour
 
     public void SetData(ChatData data)
     {
-        transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text = data.ClientEndPoint.ToString();
+        transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text = data.ClientEndPoint?.ToString();
         transform.Find("Message").gameObject.GetComponent<Text>().text = data.Message;
         transform.Find("TimeStamp").gameObject.GetComponent<Text>().text = data.TimeStamp.ToString("yyyy/MM/dd HH:mm:ss");
     }
