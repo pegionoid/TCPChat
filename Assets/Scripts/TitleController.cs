@@ -7,11 +7,11 @@ public class TitleController : MonoBehaviour
 {
     public void OnServerButtonClicked()
     {
-        SceneManager.LoadScene("Server");
+        SceneManager.LoadScene("Scenes/Server");
     }
 
     public void OnClientButtonClicked()
     {
-        SceneManager.LoadScene("Client");
+        SceneManager.LoadScene("Scenes/Client");
     }
 }

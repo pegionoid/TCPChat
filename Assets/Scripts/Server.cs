@@ -8,13 +8,14 @@ using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public class Server : MonoBehaviour
 {
     [SerializeField] public InputField _ipaddress;
     [SerializeField] public InputField _port;
     [SerializeField] public Button _listenButton;
-    [SerializeField] public GameObject ChatLogSpace;
+    [SerializeField] public ScrollRect ChatLogSpace;
     [SerializeField] public GameObject chatprefab;
     //public string _ipaddress;
     //public int _port;
@@ -42,7 +43,7 @@ public class Server : MonoBehaviour
         listClient = new List<Socket>();
         displayedChats = new List<ChatData>();
         receivedChats = new List<ChatData>();
-        foreach (Transform n in ChatLogSpace.transform)
+        foreach (Transform n in ChatLogSpace.gameObject.transform.Find("Viewport/Content"))
         {
             GameObject.Destroy(n.gameObject);
         }
@@ -56,23 +57,43 @@ public class Server : MonoBehaviour
 
     private void OnGUI()
     {
-        lock (receivedChats)
+        
+        if(receivedChats.Count > 0)
         {
-            foreach (ChatData c in receivedChats)
+            GameObject chatlogspace = ChatLogSpace.gameObject;
+            GameObject content = chatlogspace.transform.Find("Viewport/Content").gameObject;
+            LayoutGroup layoutGroup = content.GetComponent<LayoutGroup>();
+            lock (receivedChats)
             {
-                receivedChats.Remove(c);
-                GameObject chat = Instantiate(chatprefab);
-                chat.transform.SetParent(ChatLogSpace.transform);
-                chat.transform.GetComponent<Chat>().SetData(c);
-                displayedChats.Add(c);
+                foreach (ChatData c in receivedChats)
+                {
+                    receivedChats.Remove(c);
+                    if (displayedChats.Contains(c))
+                    {
+                        continue;
+                    }
+                    GameObject chat = Instantiate(chatprefab);
+                    chat.transform.GetComponent<Chat>().SetData(c);
+                    chat.transform.SetParent(content.transform, false);
+                    displayedChats.Add(c);
+                }
             }
-        }    
+            layoutGroup.CalculateLayoutInputVertical();
+            layoutGroup.SetLayoutVertical();
+            ScrollToBottom(ChatLogSpace);
+        }
     }
 
     public void OnListenButtonClicked()
     {
         // 指定したポートを開く
         Listen(_ipaddress.text, int.Parse(_port.text));
+    }
+
+    private IEnumerator ScrollToBottom(ScrollRect sr)
+    {
+        yield return new WaitForEndOfFrame();
+        sr.verticalNormalizedPosition = 0f;
     }
 
     // ソケット接続準備、待機
