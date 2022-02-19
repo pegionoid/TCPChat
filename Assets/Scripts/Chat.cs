@@ -21,7 +21,8 @@ public class Chat : MonoBehaviour
     {
         transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text = data.ClientEndPoint?.ToString();
         transform.Find("Message").gameObject.GetComponent<Text>().text = data.Message;
-        transform.Find("TimeStamp").gameObject.GetComponent<Text>().text = data.TimeStamp.ToString("yyyy/MM/dd HH:mm:ss");
+        transform.Find("TimeStamp").gameObject.GetComponent<Text>().text = DateTime.FromBinary(data.TimeStamp).ToString("yyyy/MM/dd HH:mm:ss");
+
     }
 
     public ChatData GetData()
@@ -29,7 +30,7 @@ public class Chat : MonoBehaviour
         String[] endpoint = transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text.Split(' ');
         IPEndPoint clientEndPoint = new IPEndPoint(long.Parse(endpoint[0]), int.Parse(endpoint[1]));
         String message = transform.Find("Message").gameObject.GetComponent<Text>().text;
-        String timestamp = transform.Find("TimeStamp").gameObject.GetComponent<Text>().text;
+        long timestamp = DateTime.Parse(transform.Find("TimeStamp").gameObject.GetComponent<Text>().text).ToBinary();
 
         return new ChatData(clientEndPoint, message, timestamp);
     }
@@ -40,13 +41,13 @@ public class ChatData
 {
     public IPEndPoint ClientEndPoint;
     public String Message;
-    public DateTime TimeStamp;
+    public long TimeStamp;
 
-    public ChatData(EndPoint clientEndPoint, String message, String timeStamp)
+    public ChatData(EndPoint clientEndPoint, String message, long timeStamp)
     {
         this.ClientEndPoint = (IPEndPoint)clientEndPoint;
         this.Message = message;
-        DateTime.TryParse(timeStamp, out this.TimeStamp);
+        this.TimeStamp = timeStamp;
     }
 }
 

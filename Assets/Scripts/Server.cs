@@ -17,11 +17,12 @@ public class Server : MonoBehaviour
     [SerializeField] public Button _listenButton;
     [SerializeField] public ScrollRect ChatLogSpace;
     [SerializeField] public GameObject chatprefab;
-    //public string _ipaddress;
-    //public int _port;
     private List<Socket> listClient;
     private List<ChatData> displayedChats;
     private List<ChatData> receivedChats;
+
+    private Socket server = null;
+    private bool isListen = false;
     
     //非同期データ受信のための状態オブジェクト
     private class AsyncStateObject
@@ -67,7 +68,6 @@ public class Server : MonoBehaviour
             {
                 foreach (ChatData c in receivedChats)
                 {
-                    receivedChats.Remove(c);
                     if (displayedChats.Contains(c))
                     {
                         continue;
@@ -77,21 +77,62 @@ public class Server : MonoBehaviour
                     chat.transform.SetParent(content.transform, false);
                     displayedChats.Add(c);
                 }
+                receivedChats.Clear();
             }
             layoutGroup.CalculateLayoutInputVertical();
             layoutGroup.SetLayoutVertical();
-            ScrollToBottom(ChatLogSpace);
+            StartCoroutine("ScrollToBottom", ChatLogSpace);
+        }
+        
+    }
+
+    private void OnDestroy()
+    {
+        if(!(server is null))
+        {
+            server.Shutdown(SocketShutdown.Both);
+            server.Close();
+            server.Dispose();
+            server = null;
         }
     }
 
     public void OnListenButtonClicked()
     {
-        // 指定したポートを開く
-        Listen(_ipaddress.text, int.Parse(_port.text));
+        if(server is null)
+        {
+            _ipaddress.interactable = false;
+            _port.interactable = false;
+            _listenButton.GetComponentInChildren<Text>().text = "Stop";
+            // 指定したポートを開く
+            Listen(_ipaddress.text, int.Parse(_port.text));
+        }
+        else
+        {
+            server.Close();
+            server.Dispose();
+            server = null;
+
+            _ipaddress.interactable = true;
+            _port.interactable = true;
+            _listenButton.GetComponentInChildren<Text>().text = "Listen";
+        }
+        
     }
 
-    private IEnumerator ScrollToBottom(ScrollRect sr)
+    //public void ScrollToBottom(ScrollRect sr)
+    //{
+    //    Canvas.ForceUpdateCanvases();
+    //    sr.gameObject.SetActive(true);
+    //    sr.verticalNormalizedPosition = 0f;
+    //    sr.verticalScrollbar.value = 0;
+    //    Canvas.ForceUpdateCanvases();
+    //}
+
+    public IEnumerator ScrollToBottom(ScrollRect sr)
     {
+        yield return new WaitForEndOfFrame();
+        yield return new WaitForEndOfFrame();
         yield return new WaitForEndOfFrame();
         sr.verticalNormalizedPosition = 0f;
     }
@@ -112,18 +153,18 @@ public class Server : MonoBehaviour
         IPEndPoint serverEndPoint = new IPEndPoint(ip, port);
 
         // Listen用のSocketのモードを指定して初期化
-        Socket listener = new Socket(ip.AddressFamily,
+        server = new Socket(ip.AddressFamily,
                               SocketType.Stream,
                               ProtocolType.Tcp);
 
         // 初期化したSocketをIPアドレスとポートに紐づけ
-        listener.Bind(serverEndPoint);
+        server.Bind(serverEndPoint);
 
         // 受信待ちを開始
-        listener.Listen(100);
+        server.Listen(100);
 
         // 接続要求が来た時のコールバック関数を設定
-        listener.BeginAccept(DoAcceptTcpClientCallback, listener);
+        server.BeginAccept(DoAcceptTcpClientCallback, server);
     }
 
     // クライアントからの接続処理
