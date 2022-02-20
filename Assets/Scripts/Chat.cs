@@ -21,7 +21,7 @@ public class Chat : MonoBehaviour
     {
         transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text = data.ClientEndPoint?.ToString();
         transform.Find("Message").gameObject.GetComponent<Text>().text = data.Message;
-        transform.Find("TimeStamp").gameObject.GetComponent<Text>().text = DateTime.FromBinary(data.TimeStamp).ToString("yyyy/MM/dd HH:mm:ss");
+        transform.Find("TimeStamp").gameObject.GetComponent<Text>().text = DateTimeOffset.FromUnixTimeSeconds(data.TimeStamp).LocalDateTime.ToString("yyyy/MM/dd HH:mm:ss");
 
     }
 

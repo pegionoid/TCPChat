@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -7,51 +6,84 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
 
 public class Client : MonoBehaviour
 {
-    [SerializeField] public string _serveripaddress;
-    [SerializeField] public int _serverport;
+    [SerializeField] public InputField _serveripaddress;
+    [SerializeField] public InputField _serverport;
+    [SerializeField] public Button _connectButton;
+    [SerializeField] public ChatLogSpace chatLogSpace;
+    [SerializeField] public InputField _message;
+    [SerializeField] public Button _sendButton;
 
-    private Socket server;
+    private List<ChatData> receivedChats;
 
-    //非同期データ受信のための状態オブジェクト
-    private class AsyncStateObject
+    private Socket server = null;
+
+    void Awake()
     {
-        public Socket Socket;
-        public byte[] ReceiveBuffer;
-        public MemoryStream ReceivedData;
 
-        public AsyncStateObject(System.Net.Sockets.Socket soc, int buffersize)
-        {
-            this.Socket = soc;
-            this.ReceiveBuffer = new byte[buffersize];
-            this.ReceivedData = new System.IO.MemoryStream();
-        }
-    }
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        StartConnection(_serveripaddress, _serverport);
+        receivedChats = new List<ChatData>();
     }
 
     // Update is called once per frame
     void Update()
-    {
+    { 
+    
+    }
 
-        Send(Time.frameCount.ToString(), server);
+    private void OnGUI()
+    {
+        if (receivedChats.Count > 0)
+        {
+            lock (receivedChats)
+            {
+                chatLogSpace.Add(receivedChats);
+                receivedChats.Clear();
+            }
+        }
     }
 
     private void OnDestroy()
     {
+        server?.Close();
         server?.Dispose();
+        server = null;
+    }
+
+    public void OnConnectButtonClicked()
+    {
+        if(server is null)
+        {
+            _serveripaddress.interactable = false;
+            _serverport.interactable = false;
+            _connectButton.GetComponentInChildren<Text>().text = "Disconnect";
+            _message.interactable = true;
+            _sendButton.interactable = true;
+            // 指定したIPアドレス、ポートに接続する
+            StartConnection(_serveripaddress.text, int.Parse(_serverport.text));
+        }
+        else
+        {
+            server.Close();
+            server.Dispose();
+            server = null;
+
+            _serveripaddress.interactable = true;
+            _serverport.interactable = true;
+            _connectButton.GetComponentInChildren<Text>().text = "Connect";
+            _message.interactable = false;
+            _sendButton.interactable = false;
+        }
     }
 
     public void StartConnection(string host, int port)
     {
         IPAddress ip;
 
+        Debug.Log("ipaddress:" + host + " port:" + port);
         // ホストがIPアドレス形式じゃなかったら終了
         if (!IPAddress.TryParse(host, out ip))
         {
@@ -61,39 +93,48 @@ public class Client : MonoBehaviour
 
         Debug.Log($"[{transform.name}]ipaddress:" + host + " port:" + port);
 
-        Socket s = new Socket(ip.AddressFamily,
+        // Connect用のSocketのモードを指定して初期化
+        server = new Socket(ip.AddressFamily,
                               SocketType.Stream,
                               ProtocolType.Tcp);
 
-        s.BeginConnect(ip, port, DoConnectTcpClientCallBack, s);
+        server.BeginConnect(ip, port, DoConnectTcpClientCallBack, server);
+    }
+
+    public void OnSendButtonClicked()
+    {
+        if (_message.text == "") return;
+        Send(_message.text);
     }
 
     // サーバへの接続処理
     private void DoConnectTcpClientCallBack(IAsyncResult ar)
     {
+        Socket s = (Socket)ar.AsyncState;
+        
         try
         {
-            Socket s = (Socket)ar.AsyncState;
             s.EndConnect(ar);
-
-            server = s;
-            
-            Debug.Log($"[{transform.name}]Connect: " + server.RemoteEndPoint);
-            Debug.Log($"[{transform.name}]ReceiveBufferSize: " + server.ReceiveBufferSize);
-            Debug.Log($"[{transform.name}]SendBufferSize: " + server.SendBufferSize);
-
-            // サーバからの受信を待つ
-            AsyncStateObject so = new AsyncStateObject(server, server.ReceiveBufferSize);
-            server.BeginReceive(so.ReceiveBuffer,
-                                0,
-                                so.ReceiveBuffer.Length,
-                                SocketFlags.None,
-                                DoReceiveMessageCallback,
-                                so);
-        } catch (Exception e) {
-            Debug.Log($"[{transform.name}]{e.ToString()}");
         }
-        
+        catch (System.ObjectDisposedException)
+        {
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + s.RemoteEndPoint);
+            return;
+        }
+
+        Debug.Log($"[{transform.name}]Connect: " + server.RemoteEndPoint);
+        Debug.Log($"[{transform.name}]ReceiveBufferSize: " + server.ReceiveBufferSize);
+        Debug.Log($"[{transform.name}]SendBufferSize: " + server.SendBufferSize);
+
+        // サーバからの受信を待つ
+        AsyncStateObject so = new AsyncStateObject(server);
+        server.BeginReceive(so.ReceiveBuffer,
+                            0,
+                            so.ReceiveBuffer.Length,
+                            SocketFlags.None,
+                            DoReceiveMessageCallback,
+                            so);
     }
 
     // サーバからのメッセージ受信処理
@@ -106,7 +147,7 @@ public class Client : MonoBehaviour
         {
             len = so.Socket.EndReceive(ar);
         }
-        catch (System.ObjectDisposedException)
+        catch
         {
             // 閉じた時
             Debug.Log($"[{transform.name}]Closed: " + so.Socket.RemoteEndPoint);
@@ -128,11 +169,15 @@ public class Client : MonoBehaviour
             // 最後まで受信した時
             // 受信したデータを文字列に変換
             string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+            ChatData c = JsonUtility.FromJson<ChatData>(str);
             Debug.Log($"[{transform.name}]Receive : {str}");
+            lock(receivedChats)
+            {
+                receivedChats.Add(c);
+            }
             so.ReceivedData.Close();
             so.ReceivedData = new MemoryStream();
         }
-
         // 再び受信待ち
         so.Socket.BeginReceive(so.ReceiveBuffer,
                                0,
@@ -142,7 +187,7 @@ public class Client : MonoBehaviour
                                so);
     }
 
-    private void Send(String message, Socket server)
+    private void Send(String message)
     {
         if (server is null) return;
         if (!server.Connected)
@@ -150,8 +195,9 @@ public class Client : MonoBehaviour
             Debug.Log($"[{transform.name}]server Disconnected");
             return;
         }
-        
-        byte[] messagebyte = Encoding.UTF8.GetBytes($"({transform.name}){message}");
+
+        ChatData c = new ChatData(null, message, new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
+        byte[] messagebyte = Encoding.UTF8.GetBytes(JsonUtility.ToJson(c));
         server.BeginSend(messagebyte,
                          0,
                          messagebyte.Length,
