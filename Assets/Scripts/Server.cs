@@ -24,6 +24,14 @@ public class Server : MonoBehaviour
     {
         listClient = new List<Socket>();
         receivedChats = new List<ChatData>();
+        foreach(IPAddress h in Dns.GetHostAddresses(Dns.GetHostName()))
+        {
+            if(h.AddressFamily.Equals(AddressFamily.InterNetwork))
+            {
+                _ipaddress.text = h.ToString();
+                return;
+            }
+        }
     }
 
     // Update is called once per frame
@@ -63,6 +71,11 @@ public class Server : MonoBehaviour
         }
         else
         {
+            foreach(Socket c in listClient)
+            {
+                c.Shutdown(SocketShutdown.Both);
+            }
+            listClient.Clear();
             server.Close();
             server.Dispose();
             server = null;
@@ -167,6 +180,7 @@ public class Server : MonoBehaviour
         {
             // クライアントが終了状態と判断し、切断
             Debug.Log($"[{transform.name}]Disconnected: " + so.Socket.RemoteEndPoint);
+            listClient.Remove(so.Socket);
             return;
         }
 
@@ -178,7 +192,7 @@ public class Server : MonoBehaviour
             // 受信したデータを文字列に変換
             string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
             ChatData c = JsonUtility.FromJson<ChatData>(str);
-            c.ClientEndPoint = (IPEndPoint)so.Socket.RemoteEndPoint;
+            c.ClientEndPoint = ((IPEndPoint)so.Socket.RemoteEndPoint).ToString();
             Debug.Log("Received[" + so.Socket.RemoteEndPoint + "] : " + str);
             lock (receivedChats)
             {

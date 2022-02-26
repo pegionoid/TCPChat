@@ -28,7 +28,7 @@ public class Chat : MonoBehaviour
     public ChatData GetData()
     {
         String[] endpoint = transform.Find("ClientEndPoint").gameObject.GetComponent<Text>().text.Split(' ');
-        IPEndPoint clientEndPoint = new IPEndPoint(long.Parse(endpoint[0]), int.Parse(endpoint[1]));
+        String clientEndPoint = new IPEndPoint(long.Parse(endpoint[0]), int.Parse(endpoint[1])).ToString();
         String message = transform.Find("Message").gameObject.GetComponent<Text>().text;
         long timestamp = DateTime.Parse(transform.Find("TimeStamp").gameObject.GetComponent<Text>().text).ToBinary();
 
@@ -39,13 +39,13 @@ public class Chat : MonoBehaviour
 [Serializable]
 public class ChatData
 {
-    public IPEndPoint ClientEndPoint;
+    public String ClientEndPoint;
     public String Message;
     public long TimeStamp;
 
-    public ChatData(EndPoint clientEndPoint, String message, long timeStamp)
+    public ChatData(String clientEndPoint, String message, long timeStamp)
     {
-        this.ClientEndPoint = (IPEndPoint)clientEndPoint;
+        this.ClientEndPoint = clientEndPoint;
         this.Message = message;
         this.TimeStamp = timeStamp;
     }
