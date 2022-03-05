@@ -134,14 +134,17 @@ public class Client : MonoBehaviour
                 server.Dispose();
                 server = null;
 
-                return;
+                socketStatus = SocketStatus.None;
+
+                break;
 
             case SocketStatus.Connect:
                 socketStatus = SocketStatus.Diconnecting;
                 
                 server.BeginDisconnect(false, DoDisconnectCallBack, server);
 
-                return;
+                break;
+
             default:
                 return;
         }
@@ -185,36 +188,34 @@ public class Client : MonoBehaviour
     // サーバへの接続処理
     private void DoConnectTcpClientCallBack(IAsyncResult ar)
     {
-        using (Socket s = (Socket)ar.AsyncState)
+        Socket s = (Socket)ar.AsyncState;
+        try
         {
-            try
-            {
-                s.EndConnect(ar);
-            }
-            catch (System.ObjectDisposedException)
-            {
-                // 閉じた時
-                Debug.Log($"[{transform.name}]Closed: " + s.RemoteEndPoint);
-                return;
-            }
+            s.EndConnect(ar);
+        }
+        catch (System.ObjectDisposedException)
+        {
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + s.RemoteEndPoint);
+            return;
+        }
 
-            if (socketStatus != SocketStatus.Connecting) return;
+        if (socketStatus != SocketStatus.Connecting) return;
 
-            MainthreadContext.Post(__ => { socketStatus = SocketStatus.Connect; }, null); 
+        MainthreadContext.Post(__ => { socketStatus = SocketStatus.Connect; }, null);
 
-            Debug.Log($"[{transform.name}]Connect: " + s.RemoteEndPoint);
-            Debug.Log($"[{transform.name}]ReceiveBufferSize: " + s.ReceiveBufferSize);
-            Debug.Log($"[{transform.name}]SendBufferSize: " + s.SendBufferSize);
+        Debug.Log($"[{transform.name}]Connect: " + s.RemoteEndPoint);
+        Debug.Log($"[{transform.name}]ReceiveBufferSize: " + s.ReceiveBufferSize);
+        Debug.Log($"[{transform.name}]SendBufferSize: " + s.SendBufferSize);
 
-            // サーバからの受信を待つ
-            AsyncStateObject so = new AsyncStateObject(s);
-            s.BeginReceive(so.ReceiveBuffer,
-                                0,
-                                so.ReceiveBuffer.Length,
-                                SocketFlags.None,
-                                DoReceiveMessageCallback,
-                                so);
-        }   
+        // サーバからの受信を待つ
+        AsyncStateObject so = new AsyncStateObject(s);
+        s.BeginReceive(so.ReceiveBuffer,
+                            0,
+                            so.ReceiveBuffer.Length,
+                            SocketFlags.None,
+                            DoReceiveMessageCallback,
+                            so);
     }
 
     private void DoDisconnectCallBack(IAsyncResult ar)
