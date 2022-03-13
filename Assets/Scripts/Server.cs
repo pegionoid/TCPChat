@@ -9,54 +9,23 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 
-public class Server : MonoBehaviour
+public class Server : ClinetBase
 {
-    [SerializeField] public InputField _ipaddress;
-    [SerializeField] public InputField _port;
     [SerializeField] public Button _listenButton;
-    [SerializeField] public ChatLogSpace chatLogSpace;
+
     private List<Socket> listClient;
-    private List<ChatData> receivedChats;
-
-    private Socket server = null;
     
-    void Awake()
+    private new void Awake()
     {
+        base.Awake();
         listClient = new List<Socket>();
-        receivedChats = new List<ChatData>();
-        foreach(IPAddress h in Dns.GetHostAddresses(Dns.GetHostName()))
-        {
-            if(h.AddressFamily.Equals(AddressFamily.InterNetwork))
-            {
-                _ipaddress.text = h.ToString();
-                return;
-            }
-        }
     }
 
-    // Update is called once per frame
-    void Update()
+    public override void OnSendButtonClicked()
     {
-        //SendAll(Time.frameCount.ToString());
-    }
-
-    private void OnGUI()
-    {
-        if(receivedChats.Count > 0)
-        {
-            lock (receivedChats)
-            {
-                chatLogSpace.Add(receivedChats);
-                receivedChats.Clear();
-            }
-        }
-    }
-
-    private void OnDestroy()
-    {
-        server?.Close();
-        server?.Dispose();
-        server = null;
+        if (_message.text == "") return;
+        SendAll();
+        base.Send(_message.text, server);
     }
 
     public void OnListenButtonClicked()
@@ -155,7 +124,7 @@ public class Server : MonoBehaviour
     }
 
     // クライアントからのメッセージ受信処理
-    private void DoReceiveMessageCallback(IAsyncResult ar)
+    protected override void DoReceiveMessageCallback(IAsyncResult ar)
     {
         AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
 
@@ -229,12 +198,5 @@ public class Server : MonoBehaviour
                          DoSendMessageCallBack,
                          client);
         }
-    }
-
-    private void DoSendMessageCallBack(IAsyncResult ar)
-    {
-        Socket client = (Socket)ar.AsyncState;
-
-        client.EndSend(ar);
     }
 }

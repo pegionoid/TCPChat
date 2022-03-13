@@ -10,26 +10,12 @@ using UnityEngine.UI;
 using System.Collections;
 using System.Threading;
 
-public class Client : MonoBehaviour
+public class Client : ClinetBase
 {
-    private enum SocketStatus
-    {
-        None,
-        Connecting,
-        Connect,
-        Diconnecting
-    }
-
-    [SerializeField] public InputField _serveripaddress;
-    [SerializeField] public InputField _serverport;
     [SerializeField] public Button _connectButton;
-    [SerializeField] public ChatLogSpace chatLogSpace;
-    [SerializeField] public InputField _message;
-    [SerializeField] public Button _sendButton;
-
+    
     private SynchronizationContext MainthreadContext;
-    private List<ChatData> receivedChats;
-
+    
     private SocketStatus _socketStatus;
     private SocketStatus socketStatus
     {
@@ -39,8 +25,8 @@ public class Client : MonoBehaviour
             switch (value)
             {
                 case SocketStatus.None:
-                    _serveripaddress.interactable = true;
-                    _serverport.interactable = true;
+                    _ipaddress.interactable = true;
+                    _port.interactable = true;
                     _connectButton.interactable = true;
                     _connectButton.GetComponentInChildren<Text>().text = "Connect";
                     _message.interactable = false;
@@ -48,8 +34,8 @@ public class Client : MonoBehaviour
                     break;
 
                 case SocketStatus.Connecting:
-                    _serveripaddress.interactable = false;
-                    _serverport.interactable = false;
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
                     _connectButton.interactable = true;
                     _connectButton.GetComponentInChildren<Text>().text = "Cancel";
                     _message.interactable = false;
@@ -57,8 +43,8 @@ public class Client : MonoBehaviour
                     break;
 
                 case SocketStatus.Connect:
-                    _serveripaddress.interactable = false;
-                    _serverport.interactable = false;
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
                     _connectButton.interactable = true;
                     _connectButton.GetComponentInChildren<Text>().text = "Disconnect";
                     _message.interactable = true;
@@ -66,8 +52,8 @@ public class Client : MonoBehaviour
                     break;
 
                 case SocketStatus.Diconnecting:
-                    _serveripaddress.interactable = false;
-                    _serverport.interactable = false;
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
                     _connectButton.interactable = false;
                     _connectButton.GetComponentInChildren<Text>().text = "Disconnecting...";
                     _message.interactable = false;
@@ -78,40 +64,18 @@ public class Client : MonoBehaviour
             _socketStatus = value;
         }
     }
-        
 
-    private Socket server = null;
-
-    void Awake()
+    private new void Awake()
     {
+        base.Awake();
         MainthreadContext = SynchronizationContext.Current;
         socketStatus = SocketStatus.None;
-        receivedChats = new List<ChatData>();
     }
 
-    // Update is called once per frame
-    void Update()
-    { 
-    
-    }
-
-    private void OnGUI()
+    public override void OnSendButtonClicked()
     {
-        if (receivedChats.Count > 0)
-        {
-            lock (receivedChats)
-            {
-                chatLogSpace.Add(receivedChats);
-                receivedChats.Clear();
-            }
-        }
-    }
-
-    private void OnDestroy()
-    {
-        server?.Close();
-        server?.Dispose();
-        server = null;
+        if (_message.text == "") return;
+        base.Send(_message.text, server);
     }
 
     public void OnConnectButtonClicked()
@@ -122,7 +86,7 @@ public class Client : MonoBehaviour
                 socketStatus = SocketStatus.Connecting;
                 
                 // 指定したIPアドレス、ポートに接続する
-                StartConnection(_serveripaddress.text, int.Parse(_serverport.text));
+                StartConnection(_ipaddress.text, int.Parse(_port.text));
 
                 return;
 
@@ -179,12 +143,6 @@ public class Client : MonoBehaviour
         }
     }
 
-    public void OnSendButtonClicked()
-    {
-        if (_message.text == "") return;
-        Send(_message.text);
-    }
-
     // サーバへの接続処理
     private void DoConnectTcpClientCallBack(IAsyncResult ar)
     {
@@ -228,7 +186,7 @@ public class Client : MonoBehaviour
     }
 
     // サーバからのメッセージ受信処理
-    private void DoReceiveMessageCallback(IAsyncResult ar)
+    protected override void DoReceiveMessageCallback(IAsyncResult ar)
     {
         AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
 
@@ -298,12 +256,5 @@ public class Client : MonoBehaviour
                          SocketFlags.None,
                          DoSendMessageCallBack,
                          server);
-    }
-
-    private void DoSendMessageCallBack(IAsyncResult ar)
-    {
-        Socket s = (Socket)ar.AsyncState;
-
-        s.EndSend(ar);
     }
 }
