@@ -9,6 +9,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using System.Collections;
 using System.Threading;
+using UnityEngine.SceneManagement;
 
 public abstract class ClinetBase : MonoBehaviour
 {
@@ -68,6 +69,12 @@ public abstract class ClinetBase : MonoBehaviour
         return;
     }
 
+    public void OnTitleButtonClicked()
+    {
+        SceneManager.LoadScene("Scenes/Title");
+        return;
+    }
+
     protected virtual void DoReceiveMessageCallback(IAsyncResult ar)
     {
         AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
@@ -81,7 +88,7 @@ public abstract class ClinetBase : MonoBehaviour
                                so);
     }
 
-    protected virtual void Send(String message, Socket target)
+    protected void Send(ChatData chatData, Socket target)
     {
         if (target is null) return;
         if (!target.Connected)
@@ -90,8 +97,7 @@ public abstract class ClinetBase : MonoBehaviour
             return;
         }
 
-        ChatData c = new ChatData(null, message, new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
-        byte[] messagebyte = Encoding.UTF8.GetBytes(JsonUtility.ToJson(c));
+        byte[] messagebyte = Encoding.UTF8.GetBytes(JsonUtility.ToJson(chatData));
         target.BeginSend(messagebyte,
                          0,
                          messagebyte.Length,
@@ -106,4 +112,6 @@ public abstract class ClinetBase : MonoBehaviour
 
         s.EndSend(ar);
     }
+
+    
 }

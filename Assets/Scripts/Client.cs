@@ -75,7 +75,11 @@ public class Client : ClinetBase
     public override void OnSendButtonClicked()
     {
         if (_message.text == "") return;
-        base.Send(_message.text, server);
+        ChatData c = new ChatData(null
+                                  , _message.text
+                                  , new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
+        base.Send(c, server);
+        _message.text = "";
     }
 
     public void OnConnectButtonClicked()
@@ -237,24 +241,5 @@ public class Client : ClinetBase
                                SocketFlags.None,
                                DoReceiveMessageCallback,
                                so);
-    }
-
-    private void Send(String message)
-    {
-        if (server is null) return;
-        if (!server.Connected)
-        {
-            Debug.Log($"[{transform.name}]server Disconnected");
-            return;
-        }
-
-        ChatData c = new ChatData(null, message, new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
-        byte[] messagebyte = Encoding.UTF8.GetBytes(JsonUtility.ToJson(c));
-        server.BeginSend(messagebyte,
-                         0,
-                         messagebyte.Length,
-                         SocketFlags.None,
-                         DoSendMessageCallBack,
-                         server);
     }
 }

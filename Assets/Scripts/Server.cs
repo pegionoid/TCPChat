@@ -21,13 +21,33 @@ public class Server : ClinetBase
         listClient = new List<Socket>();
     }
 
+    private new void OnDestroy()
+    {
+        foreach (Socket c in listClient)
+        {
+            c.Shutdown(SocketShutdown.Both);
+        }
+        listClient.Clear();
+        base.OnDestroy();
+    }
+
     public override void OnSendButtonClicked()
     {
         if (_message.text == "") return;
-        SendAll();
-        base.Send(_message.text, server);
+        ChatData c = new ChatData(((IPEndPoint)server.LocalEndPoint).ToString()
+                                  , _message.text
+                                  , new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
+        lock (receivedChats)
+        {
+            receivedChats.Add(c);
+        }
+        lock (listClient)
+        {
+            SendAll(c);
+        }
+        _message.text = "";
     }
-
+    
     public void OnListenButtonClicked()
     {
         if(server is null)
@@ -35,6 +55,8 @@ public class Server : ClinetBase
             _ipaddress.interactable = false;
             _port.interactable = false;
             _listenButton.GetComponentInChildren<Text>().text = "Stop";
+            _message.interactable = true;
+            _sendButton.interactable = true;
             // 指定したポートを開く
             Listen(_ipaddress.text, int.Parse(_port.text));
         }
@@ -52,12 +74,14 @@ public class Server : ClinetBase
             _ipaddress.interactable = true;
             _port.interactable = true;
             _listenButton.GetComponentInChildren<Text>().text = "Listen";
+            _message.interactable = false;
+            _sendButton.interactable = false;
         }
         
     }
 
     // ソケット接続準備、待機
-    public void Listen(string host, int port)
+    private void Listen(string host, int port)
     {
         IPAddress ip;
 
@@ -186,17 +210,9 @@ public class Server : ClinetBase
 
     private void SendAll(ChatData chat)
     {
-        //Debug.Log($"[{transform.name}]SendAll : {message}");
-        byte[] messagebyte = Encoding.UTF8.GetBytes(JsonUtility.ToJson(chat));
-        
         foreach (var client in listClient)
         {
-            client.BeginSend(messagebyte,
-                         0,
-                         messagebyte.Length,
-                         SocketFlags.None,
-                         DoSendMessageCallBack,
-                         client);
+            Send(chat, client);
         }
     }
 }
