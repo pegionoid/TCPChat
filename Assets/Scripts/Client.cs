@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -7,24 +6,116 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.UI;
+using System.Collections;
+using System.Threading;
 
-public class Client : MonoBehaviour
+public class Client : ClinetBase
 {
-    [SerializeField] public string _serveripaddress;
-    [SerializeField] public int _serverport;
-
-    private TcpClient tcpClient;
+    [SerializeField] public Button _connectButton;
     
-    // Start is called before the first frame update
-    void Start()
+    private SynchronizationContext MainthreadContext;
+    
+    private SocketStatus _socketStatus;
+    private SocketStatus socketStatus
     {
-        StartConnection(_serveripaddress, _serverport);
+        get { return _socketStatus; }
+        set
+        {
+            switch (value)
+            {
+                case SocketStatus.None:
+                    _ipaddress.interactable = true;
+                    _port.interactable = true;
+                    _connectButton.interactable = true;
+                    _connectButton.GetComponentInChildren<Text>().text = "Connect";
+                    _message.interactable = false;
+                    _sendButton.interactable = false;
+                    break;
+
+                case SocketStatus.Connecting:
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
+                    _connectButton.interactable = true;
+                    _connectButton.GetComponentInChildren<Text>().text = "Cancel";
+                    _message.interactable = false;
+                    _sendButton.interactable = false;
+                    break;
+
+                case SocketStatus.Connect:
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
+                    _connectButton.interactable = true;
+                    _connectButton.GetComponentInChildren<Text>().text = "Disconnect";
+                    _message.interactable = true;
+                    _sendButton.interactable = true;
+                    break;
+
+                case SocketStatus.Diconnecting:
+                    _ipaddress.interactable = false;
+                    _port.interactable = false;
+                    _connectButton.interactable = false;
+                    _connectButton.GetComponentInChildren<Text>().text = "Disconnecting...";
+                    _message.interactable = false;
+                    _sendButton.interactable = false;
+                    break;
+            }
+
+            _socketStatus = value;
+        }
     }
 
-    // Update is called once per frame
-    void Update()
+    private new void Awake()
     {
-        Send(Time.frameCount.ToString(),tcpClient);
+        base.Awake();
+        MainthreadContext = SynchronizationContext.Current;
+        socketStatus = SocketStatus.None;
+    }
+
+    public override void OnSendButtonClicked()
+    {
+        if (_message.text == "") return;
+        ChatData c = new ChatData(null
+                                  , _message.text
+                                  , new DateTimeOffset(DateTime.Now).ToUnixTimeSeconds());
+        base.Send(c, server);
+        _message.text = "";
+    }
+
+    public void OnConnectButtonClicked()
+    {
+        switch(socketStatus)
+        {
+            case SocketStatus.None:
+                socketStatus = SocketStatus.Connecting;
+                
+                // 指定したIPアドレス、ポートに接続する
+                StartConnection(_ipaddress.text, int.Parse(_port.text));
+
+                return;
+
+            case SocketStatus.Connecting:
+                socketStatus = SocketStatus.Diconnecting;
+
+                // Socketを閉じる
+                server.Close();
+                server.Dispose();
+                server = null;
+
+                socketStatus = SocketStatus.None;
+
+                break;
+
+            case SocketStatus.Connect:
+                socketStatus = SocketStatus.Diconnecting;
+                
+                server.BeginDisconnect(false, DoDisconnectCallBack, server);
+
+                break;
+
+            default:
+                return;
+        }
     }
 
     public void StartConnection(string host, int port)
@@ -35,63 +126,120 @@ public class Client : MonoBehaviour
         // ホストがIPアドレス形式じゃなかったら終了
         if (!IPAddress.TryParse(host, out ip))
         {
-            Debug.Log("server address is invalid.");
+            Debug.Log($"[{transform.name}]server address is invalid.");
             return;
         }
 
-        tcpClient = new TcpClient(AddressFamily.InterNetwork);
+        Debug.Log($"[{transform.name}]ipaddress:" + host + " port:" + port);
 
-        tcpClient.BeginConnect(ip, port, DoConnectTcpClientCallBack, tcpClient);
+        // Connect用のSocketのモードを指定して初期化
+        server = new Socket(ip.AddressFamily,
+                              SocketType.Stream,
+                              ProtocolType.Tcp);
+        try
+        {
+            server.BeginConnect(ip, port, DoConnectTcpClientCallBack, server);
+        }
+        catch(ObjectDisposedException)
+        {
+            socketStatus = SocketStatus.None;
+            return;
+        }
     }
 
     // サーバへの接続処理
     private void DoConnectTcpClientCallBack(IAsyncResult ar)
     {
-        tcpClient = (TcpClient)ar.AsyncState;
-
-        var stream = tcpClient.GetStream();
-        var reader = new StreamReader(stream, Encoding.UTF8);
-
-        // 接続が切れるまで送受信を繰り返す
-        while (tcpClient.Connected)
+        Socket s = (Socket)ar.AsyncState;
+        try
         {
-            while (!reader.EndOfStream)
-            {
-                // 一行分の文字列を受け取る
-                var str = reader.ReadLine();
-                Byte[] vs = Encoding.UTF8.GetBytes(str);
-                Debug.Log("Received[" + tcpClient.Client.RemoteEndPoint + "] : " + str);
-                
-            }
-
-            //// 1000μs待って、接続状態が保留中、読取可、切断の場合
-            //if (server.Client.Poll(1000, SelectMode.SelectRead))
-            //{
-            //    // かつ、クライアントからの読取可能データ量がZEROの場合
-            //    if (server.Client.Available == 0)
-            //    {
-                    
-            //    }
-            //}
+            s.EndConnect(ar);
         }
-        // クライアントが終了状態と判断し、切断
-        Debug.Log("Disconnect: " + tcpClient.Client.RemoteEndPoint);
-    }
-
-    private void Send(String massage, TcpClient server)
-    {
-        if (!server.Connected)
+        catch (System.ObjectDisposedException)
         {
-            //Debug.Log("server Disconnected");
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + s.RemoteEndPoint);
             return;
         }
 
-        using (var stream = server.GetStream())
+        if (socketStatus != SocketStatus.Connecting) return;
+
+        MainthreadContext.Post(__ => { socketStatus = SocketStatus.Connect; }, null);
+
+        Debug.Log($"[{transform.name}]Connect: " + s.RemoteEndPoint);
+        Debug.Log($"[{transform.name}]ReceiveBufferSize: " + s.ReceiveBufferSize);
+        Debug.Log($"[{transform.name}]SendBufferSize: " + s.SendBufferSize);
+
+        // サーバからの受信を待つ
+        AsyncStateObject so = new AsyncStateObject(s);
+        s.BeginReceive(so.ReceiveBuffer,
+                            0,
+                            so.ReceiveBuffer.Length,
+                            SocketFlags.None,
+                            DoReceiveMessageCallback,
+                            so);
+    }
+
+    private void DoDisconnectCallBack(IAsyncResult ar)
+    {
+        Socket s = (Socket)ar.AsyncState;
+
+        s.EndDisconnect(ar);
+
+        MainthreadContext.Post(__ => { socketStatus = SocketStatus.None; }, null);
+    }
+
+    // サーバからのメッセージ受信処理
+    protected override void DoReceiveMessageCallback(IAsyncResult ar)
+    {
+        AsyncStateObject so = (AsyncStateObject)ar.AsyncState;
+
+        int len = 0;
+        try
         {
-            using (var writer = new StreamWriter(stream, Encoding.UTF8))
-            {
-                writer.WriteLine(massage);
-            }
+            len = so.Socket.EndReceive(ar);
         }
+        catch
+        {
+            // 閉じた時
+            Debug.Log($"[{transform.name}]Closed: " + so.Socket.RemoteEndPoint);
+            MainthreadContext.Post(__ => { OnConnectButtonClicked(); }, null);
+            return;
+        }
+
+        // クライアントからの読取可能データ量がZEROの場合
+        if (len <= 0)
+        {
+            // クライアントが終了状態と判断し、切断
+            Debug.Log($"[{transform.name}]Disconnected: " + so.Socket.RemoteEndPoint);
+            MainthreadContext.Post(__ => { OnConnectButtonClicked(); }, null);
+            return;
+        }
+
+
+
+        // サーバとのネットワークストリームを取得
+        so.ReceivedData.Write(so.ReceiveBuffer, 0, len);
+        if (so.Socket.Available == 0)
+        {
+            // 最後まで受信した時
+            // 受信したデータを文字列に変換
+            string str = Encoding.UTF8.GetString(so.ReceivedData.ToArray());
+            ChatData c = JsonUtility.FromJson<ChatData>(str);
+            Debug.Log($"[{transform.name}]Receive : {str}");
+            lock(receivedChats)
+            {
+                receivedChats.Add(c);
+            }
+            so.ReceivedData.Close();
+            so.ReceivedData = new MemoryStream();
+        }
+        // 再び受信待ち
+        so.Socket.BeginReceive(so.ReceiveBuffer,
+                               0,
+                               so.ReceiveBuffer.Length,
+                               SocketFlags.None,
+                               DoReceiveMessageCallback,
+                               so);
     }
 }
